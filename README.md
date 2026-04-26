@@ -31,6 +31,7 @@ origin-policy/
 ├── origin_policy/                    # importable package
 │   ├── __init__.py
 │   ├── policy_gate.py                # CLI + check() API
+│   ├── check_management_output.py    # 管理クロード出力の手動 wrapper（CLI）
 │   └── classifier.py                 # 13 カテゴリ分類器
 ├── rules/
 │   ├── human_judgment_categories.yaml   # 13 カテゴリ定義（管理クロード確定済）
@@ -40,7 +41,13 @@ origin-policy/
 │   └── report_package.schema.json       # Claude Code → 管理クロード 完了報告 schema
 ├── scripts/                          # CLI ラッパー
 │   ├── policy_gate.py
-│   └── classifier.py
+│   ├── classifier.py
+│   ├── check_management_output.py    # 管理クロード出力 wrapper の thin shim
+│   └── macos_service/                # Quick Action（右クリック→検査→通知）
+│       ├── PolicyGateCheck.workflow/
+│       ├── install.sh
+│       ├── uninstall.sh
+│       └── linux_fallback.sh         # xclip + notify-send 版
 ├── eval/
 │   └── violations/                   # 違反テストケース（YAML）
 │       ├── r1_question_no_category.yaml
@@ -83,6 +90,22 @@ cat report.json | python -m origin_policy.policy_gate check --type=report_packag
 echo "PR merged. ✅ 完了" | python -m origin_policy.policy_gate check --type=completion_report_text
 # → exit 1, R4 violation: forbidden_text
 ```
+
+### 管理クロード出力の手動検査（推奨フロー）
+
+`Claude.ai` web UI の出力は自動フックできないため、コピペで検査する CLI を別途用意:
+
+```bash
+pbpaste | python -m origin_policy.check_management_output
+echo "テキスト" | python -m origin_policy.check_management_output
+python -m origin_policy.check_management_output --file path/to/text.md
+python -m origin_policy.check_management_output --json < text.md   # raw JSON
+```
+
+`policy_gate check --type=management_output` の薄い wrapper で、出力は人間可読の
+`[Policy Gate] BLOCK — N violation(s)` 形式（exit 1 が BLOCK）。
+macOS では `scripts/macos_service/install.sh` で右クリックメニューに
+"Policy Gate で検査" を登録できる（通知センターで結果表示）。
 
 入力タイプ:
 

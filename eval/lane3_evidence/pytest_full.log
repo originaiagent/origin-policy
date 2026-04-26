@@ -1,0 +1,39 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0 -- /Library/Developer/CommandLineTools/usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/user/dev/origin-policy-lane3
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.12.1
+collecting ... collected 28 items
+
+tests/test_check_management_output.py::test_sample_r3_blocks_with_phase_id PASSED [  3%]
+tests/test_check_management_output.py::test_sample_r1_blocks_with_choice_and_forbidden_phrase PASSED [  7%]
+tests/test_check_management_output.py::test_sample_combined_blocks_with_phase_id_and_warns_on_temptation PASSED [ 10%]
+tests/test_check_management_output.py::test_wrapper_exits_with_code_1_on_block[sample_r3] PASSED [ 14%]
+tests/test_check_management_output.py::test_wrapper_exits_with_code_1_on_block[sample_r1] PASSED [ 17%]
+tests/test_check_management_output.py::test_wrapper_exits_with_code_1_on_block[sample_combined] PASSED [ 21%]
+tests/test_check_management_output.py::test_wrapper_json_output_status_is_block[sample_r3] PASSED [ 25%]
+tests/test_check_management_output.py::test_wrapper_json_output_status_is_block[sample_r1] PASSED [ 28%]
+tests/test_check_management_output.py::test_wrapper_json_output_status_is_block[sample_combined] PASSED [ 32%]
+tests/test_check_management_output.py::test_wrapper_human_output_includes_block_marker_and_position PASSED [ 35%]
+tests/test_check_management_output.py::test_wrapper_pass_on_clean_input PASSED [ 39%]
+tests/test_check_management_output.py::test_wrapper_normalizes_crlf PASSED [ 42%]
+tests/test_check_management_output.py::test_wrapper_reads_from_file PASSED [ 46%]
+tests/test_check_management_output.py::test_phase_id_in_reference_section_does_not_trigger_r3 PASSED [ 50%]
+tests/test_policy_gate.py::test_violation_cases_loaded PASSED            [ 53%]
+tests/test_policy_gate.py::test_violation_detected[r1_question_no_category_001] PASSED [ 57%]
+tests/test_policy_gate.py::test_violation_detected[r3_phase_id_in_body_001] PASSED [ 60%]
+tests/test_policy_gate.py::test_violation_detected[r3_uuid_in_body_001] PASSED [ 64%]
+tests/test_policy_gate.py::test_violation_detected[r4_emoji_only_completion_001] PASSED [ 67%]
+tests/test_policy_gate.py::test_violation_detected[r4_no_evidence_001] PASSED [ 71%]
+tests/test_policy_gate.py::test_violation_detected[r5_freeform_instruction_001] PASSED [ 75%]
+tests/test_policy_gate.py::test_clean_text_passes PASSED                 [ 78%]
+tests/test_policy_gate.py::test_phase_id_in_reference_section_is_allowed PASSED [ 82%]
+tests/test_policy_gate.py::test_uuid_in_url_is_allowed PASSED            [ 85%]
+tests/test_policy_gate.py::test_classifiable_question_does_not_block PASSED [ 89%]
+tests/test_policy_gate.py::test_forbidden_phrase_blocks PASSED           [ 92%]
+tests/test_policy_gate.py::test_valid_report_package_passes PASSED       [ 96%]
+tests/test_policy_gate.py::test_invalid_task_package_blocks PASSED       [100%]
+
+============================== 28 passed in 0.07s ==============================
