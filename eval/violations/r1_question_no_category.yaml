@@ -1,0 +1,12 @@
+id: r1_question_no_category_001
+rule: R1
+input_type: management_output
+description: |
+  「どっちが」で始まる選択肢を問う質問だが、内容は技術選択（TypeScript / Python）。
+  これは AI 即決領域なので、13 カテゴリに分類できず BLOCK されるべき。
+input: |
+  どっちが良いですか、TypeScript と Python のどっちで書きますか
+expected:
+  status: BLOCK
+  detected_rules: [R1]
+  detected_patterns: [unclassifiable_question]

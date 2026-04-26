@@ -1,0 +1,12 @@
+id: r4_emoji_only_completion_001
+rule: R4
+input_type: completion_report_text
+description: |
+  「✅ 完了」だけの自己申告完了報告。R4 forbidden_patterns で BLOCK。
+input: |
+  PR を merge しました。
+  ✅ 完了
+expected:
+  status: BLOCK
+  detected_rules: [R4]
+  detected_patterns: [forbidden_text]

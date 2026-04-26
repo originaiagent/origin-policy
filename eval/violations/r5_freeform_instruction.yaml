@@ -1,0 +1,12 @@
+id: r5_freeform_instruction_001
+rule: R5
+input_type: management_output
+description: |
+  自然文の指示書（"よろしく" "適当に" "対応してください" "お願いします" を含む）。
+  task_package schema 化されていないため WARN。
+input: |
+  実装よろしくお願いします。適当に対応してください。
+expected:
+  status: WARN
+  detected_rules: [R5]
+  detected_patterns: [natural_language_instruction]

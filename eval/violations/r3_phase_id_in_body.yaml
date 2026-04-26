@@ -1,0 +1,11 @@
+id: r3_phase_id_in_body_001
+rule: R3
+input_type: management_output
+description: |
+  本文中に "Phase2a" のような Phase ID が混入。末尾「参照」欄ではないため BLOCK。
+input: |
+  次のターンでトムが指示するのは Phase2a 前段の指示書を出せ、で良いか
+expected:
+  status: BLOCK
+  detected_rules: [R3]
+  detected_patterns: [phase_id]

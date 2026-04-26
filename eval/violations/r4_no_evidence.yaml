@@ -1,0 +1,28 @@
+id: r4_no_evidence_001
+rule: R4
+input_type: report_package
+description: |
+  evidence_urls が空の完了報告。schema の minItems:1 に違反 ＆ R4 ルール違反で BLOCK。
+input:
+  schema_version: "1.0"
+  task_package_id: "test-task-001"
+  status: done
+  summary: "実装が終わりました"
+  evidence_urls: []
+  tests_run:
+    - name: pytest
+      method: pytest
+      result: pass
+  ci_status:
+    status: green
+    verified_at_source: "https://github.com/originaiagent/origin-policy/actions/runs/0"
+  self_check:
+    build: pass
+    ui: "n/a"
+    feature: pass
+    regression: pass
+    errors: pass
+expected:
+  status: BLOCK
+  detected_rules: [R4]
+  detected_patterns: [no_evidence]
