@@ -1,0 +1,55 @@
+=== sample 3 ===
+input: Phase2a前段(366508de)future/low / 念のため確認したいのですが...
+--- human-readable output ---
+[Policy Gate] BLOCK — 1 violation(s)
+  - [R3/phase_id] 'Phase2a' @ pos 0
+    → Phase ID を本文に出さない。末尾「参照」欄に分離してください。
+
+  (additionally 2 warning(s))
+  - [R3/short_uuid] '366508de' @ pos 10
+    → 短縮 UUID（8 桁 hex）が含まれる。意図的でないなら末尾「参照」へ。
+  - [R1/temptation_word] '念のため' @ pos 32
+    → 保守判断の誘惑ワード。即 GO 判定 4 項目に戻る。
+
+書き換え推奨: 内部 ID（Phase ID / UUID）は本文末尾の「参照」欄に分離し、保留質問・選択肢提示・「即決すべきなら言って」等の自己申告は削除して即決してください。
+--- exit code: 1 ---
+--- json output ---
+{
+  "status": "BLOCK",
+  "findings": [
+    {
+      "rule": "R3",
+      "pattern_id": "phase_id",
+      "severity": "block",
+      "message": "Phase ID を本文に出さない。末尾「参照」欄に分離してください。",
+      "match": "Phase2a",
+      "position": 0
+    },
+    {
+      "rule": "R3",
+      "pattern_id": "short_uuid",
+      "severity": "warn",
+      "message": "短縮 UUID（8 桁 hex）が含まれる。意図的でないなら末尾「参照」へ。",
+      "match": "366508de",
+      "position": 10
+    },
+    {
+      "rule": "R1",
+      "pattern_id": "temptation_word",
+      "severity": "warn",
+      "message": "保守判断の誘惑ワード。即 GO 判定 4 項目に戻る。",
+      "match": "念のため",
+      "position": 32
+    }
+  ],
+  "detected_rules": [
+    "R1",
+    "R3"
+  ],
+  "detected_patterns": [
+    "phase_id",
+    "short_uuid",
+    "temptation_word"
+  ]
+}
+

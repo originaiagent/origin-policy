@@ -1,0 +1,30 @@
+=== sample 1 ===
+input: 次のターンでトムが指示するのは「Phase2a 前段の指示書を出せ」か「別ゴール」か。
+--- human-readable output ---
+[Policy Gate] BLOCK — 1 violation(s)
+  - [R3/phase_id] 'Phase2a' @ pos 16
+    → Phase ID を本文に出さない。末尾「参照」欄に分離してください。
+
+書き換え推奨: 内部 ID（Phase ID / UUID）は本文末尾の「参照」欄に分離し、保留質問・選択肢提示・「即決すべきなら言って」等の自己申告は削除して即決してください。
+--- exit code: 1 ---
+--- json output ---
+{
+  "status": "BLOCK",
+  "findings": [
+    {
+      "rule": "R3",
+      "pattern_id": "phase_id",
+      "severity": "block",
+      "message": "Phase ID を本文に出さない。末尾「参照」欄に分離してください。",
+      "match": "Phase2a",
+      "position": 16
+    }
+  ],
+  "detected_rules": [
+    "R3"
+  ],
+  "detected_patterns": [
+    "phase_id"
+  ]
+}
+

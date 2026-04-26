@@ -1,0 +1,43 @@
+=== sample 2 ===
+input: (A) 昇格する / (B) このまま future 維持 トム判断仰がず即決すべき内容なら言って。
+--- human-readable output ---
+[Policy Gate] BLOCK — 2 violation(s)
+  - [R1/unclassifiable_question] '(A) 昇格する / (B) このまま future 維持 トム判断仰がず即決すべき内容なら言って' @ pos 0
+    → この質問は人間判断カテゴリ（13個）に分類できません。
+AI 即決領域の可能性が高い。質問せず即決してください。
+  - [R1/forbidden_phrase] 'トム判断仰がず' @ pos 30
+    → 保留質問・自己申告は禁止。即決可否は管理クロード側で判断する。
+
+書き換え推奨: 内部 ID（Phase ID / UUID）は本文末尾の「参照」欄に分離し、保留質問・選択肢提示・「即決すべきなら言って」等の自己申告は削除して即決してください。
+--- exit code: 1 ---
+--- json output ---
+{
+  "status": "BLOCK",
+  "findings": [
+    {
+      "rule": "R1",
+      "pattern_id": "unclassifiable_question",
+      "severity": "block",
+      "message": "この質問は人間判断カテゴリ（13個）に分類できません。\nAI 即決領域の可能性が高い。質問せず即決してください。",
+      "match": "(A) 昇格する / (B) このまま future 維持 トム判断仰がず即決すべき内容なら言って",
+      "trigger_type": "choice_offer",
+      "position": 0
+    },
+    {
+      "rule": "R1",
+      "pattern_id": "forbidden_phrase",
+      "severity": "block",
+      "message": "保留質問・自己申告は禁止。即決可否は管理クロード側で判断する。",
+      "match": "トム判断仰がず",
+      "position": 30
+    }
+  ],
+  "detected_rules": [
+    "R1"
+  ],
+  "detected_patterns": [
+    "forbidden_phrase",
+    "unclassifiable_question"
+  ]
+}
+
