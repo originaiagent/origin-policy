@@ -62,11 +62,14 @@ def _fetch_paginated(
     *,
     time_col: str | None = None,
     since: datetime | None = None,
+    in_filters: dict[str, list[str]] | None = None,
+    order_col: str | None = None,
+    order_desc: bool = True,
     limit: int = MAX_ROWS,
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Fetch rows in pages. Returns (rows, truncated_flag).
+    """Fetch rows in pages, server-side filtered + ordered. Returns (rows, truncated_flag).
 
-    truncated_flag is True when the limit was reached and more rows likely exist.
+    Ordering is required for deterministic truncation when `limit` is hit.
     """
     client = get_supabase_client()
     rows: list[dict[str, Any]] = []
@@ -78,6 +81,12 @@ def _fetch_paginated(
             q = client.table(table).select("*")
             if time_col and since is not None:
                 q = q.gte(time_col, since.isoformat())
+            if in_filters:
+                for col, values in in_filters.items():
+                    if values:
+                        q = q.in_(col, values)
+            if order_col:
+                q = q.order(order_col, desc=order_desc)
             resp = q.range(offset, offset + page_size - 1).execute()
         except Exception as exc:
             raise RuntimeError(
@@ -97,11 +106,25 @@ def _fetch_paginated(
 
 
 @st.cache_data(ttl=60)
-def fetch_violations(period_key: str) -> tuple[pd.DataFrame, bool]:
+def fetch_violations(
+    period_key: str,
+    tool_names: tuple[str, ...] = (),
+    rule_ids: tuple[str, ...] = (),
+) -> tuple[pd.DataFrame, bool]:
     days = PERIOD_OPTIONS.get(period_key)
     since = datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
+    in_filters: dict[str, list[str]] = {}
+    if tool_names:
+        in_filters["tool_name"] = list(tool_names)
+    if rule_ids:
+        in_filters["rule_id"] = list(rule_ids)
     rows, truncated = _fetch_paginated(
-        "policy_violations", time_col="occurred_at", since=since
+        "policy_violations",
+        time_col="occurred_at",
+        since=since,
+        in_filters=in_filters or None,
+        order_col="occurred_at",
+        order_desc=True,
     )
     df = pd.DataFrame(rows)
     if df.empty:
@@ -113,9 +136,33 @@ def fetch_violations(period_key: str) -> tuple[pd.DataFrame, bool]:
 
 
 @st.cache_data(ttl=60)
-def fetch_pr_impact() -> pd.DataFrame:
-    rows, _ = _fetch_paginated("v_policy_violations_pr_impact")
+def fetch_pr_impact(period_key: str) -> pd.DataFrame:
+    days = PERIOD_OPTIONS.get(period_key)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
+    rows, _ = _fetch_paginated(
+        "v_policy_violations_pr_impact",
+        time_col="first_violation_at",
+        since=since,
+        order_col="first_violation_at",
+        order_desc=True,
+    )
     return pd.DataFrame(rows)
+
+
+@st.cache_data(ttl=60)
+def fetch_filter_choices(period_key: str) -> tuple[list[str], list[str]]:
+    """Fetch distinct tool_name / rule_id within the period for sidebar options."""
+    days = PERIOD_OPTIONS.get(period_key)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
+    client = get_supabase_client()
+    q = client.table("policy_violations").select("tool_name,rule_id")
+    if since is not None:
+        q = q.gte("occurred_at", since.isoformat())
+    resp = q.limit(MAX_ROWS).execute()
+    df = pd.DataFrame(resp.data or [])
+    tools = sorted(df["tool_name"].dropna().unique().tolist()) if "tool_name" in df.columns else []
+    rules = sorted(df["rule_id"].dropna().unique().tolist()) if "rule_id" in df.columns else []
+    return tools, rules
 
 
 def apply_filters(
@@ -192,7 +239,7 @@ def render_overview(filtered: pd.DataFrame) -> None:
             st.plotly_chart(fig, use_container_width=True)
 
     with right2:
-        st.subheader("⑤ rule_id 別 違反トップ 10 抜粋")
+        st.subheader("⑤ 直近の違反 トップ 10（rule_id 列付き）")
         excerpts = filtered.dropna(subset=["excerpt"]).copy()
         excerpts = excerpts.sort_values("occurred_at", ascending=False).head(10)
         cols = [c for c in ["occurred_at", "rule_id", "actor", "tool_name", "excerpt"] if c in excerpts.columns]
@@ -268,8 +315,7 @@ def main() -> None:
     period = st.sidebar.radio("期間", list(PERIOD_OPTIONS.keys()), index=1, horizontal=True)
 
     try:
-        violations, truncated = fetch_violations(period)
-        pr_impact = fetch_pr_impact()
+        tool_choices, rule_choices = fetch_filter_choices(period)
     except Exception as exc:
         st.error(
             "DB 接続/クエリに失敗しました。SUPABASE_URL / SUPABASE_SERVICE_KEY を確認してください。\n"
@@ -277,24 +323,31 @@ def main() -> None:
         )
         st.stop()
 
-    if truncated:
-        st.warning(
-            f"取得件数が上限 ({MAX_ROWS}) に達しました。期間フィルタを狭めるか、ビュー側で集計するクエリに切り替えてください。"
-        )
-
-    tool_choices = sorted(violations["tool_name"].dropna().unique().tolist()) if not violations.empty else []
     tools = st.sidebar.multiselect("tool_name", tool_choices, default=[])
-
-    rule_choices = sorted(violations["rule_id"].dropna().unique().tolist()) if not violations.empty else []
     rules = st.sidebar.multiselect("rule_id", rule_choices, default=[])
 
     if st.sidebar.button("再読み込み"):
         st.cache_data.clear()
         st.rerun()
 
+    try:
+        violations, truncated = fetch_violations(period, tuple(tools), tuple(rules))
+        pr_impact = fetch_pr_impact(period)
+    except Exception as exc:
+        st.error(
+            "DB 接続/クエリに失敗しました。\n"
+            f"詳細: {type(exc).__name__}: {exc}"
+        )
+        st.stop()
+
+    if truncated:
+        st.warning(
+            f"取得件数が上限 ({MAX_ROWS}) に達しました。期間 / フィルタを狭めるか、集計ビューで参照してください。"
+        )
+
     st.sidebar.caption("読み取り元: origin-core / policy_violations")
     st.sidebar.caption(
-        f"取得済 {len(violations)} 件 (server-side period filter, max {MAX_ROWS})"
+        f"取得済 {len(violations)} 件 (server-side filter, max {MAX_ROWS})"
     )
 
     filtered = apply_filters(violations, tools, rules)
