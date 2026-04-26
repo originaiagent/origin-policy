@@ -1,0 +1,127 @@
+# Tier 0 検出器（regex / classifier 設定）
+# 2026-04-26 新設
+
+version: 1
+
+# R3: 内部 ID / Phase ID / UUID を本文に出さない
+r3_internal_id_in_body:
+  description: 本文（末尾「参照」欄を除く）に内部 ID パターンが含まれたら BLOCK
+  patterns:
+    - id: phase_id
+      regex: 'Phase\s*\d+[a-z]?'
+      severity: block
+      message: Phase ID を本文に出さない。末尾「参照」欄に分離してください。
+    - id: full_uuid
+      regex: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+      severity: block
+      message: UUID を本文に出さない。末尾「参照」欄に分離してください。
+    - id: short_uuid
+      regex: '\b[0-9a-f]{8}\b'
+      severity: warn
+      message: 短縮 UUID（8 桁 hex）が含まれる。意図的でないなら末尾「参照」へ。
+    - id: task_id_label
+      regex: '(?i)task[_-]?id|phase[_-]?id'
+      severity: block
+      message: ID ラベルそのものを本文に出さない。
+  exceptions:
+    # 末尾「参照」欄
+    - context_starts_with: '参照'
+    - context_starts_with: '## 参照'
+    - context_starts_with: '---\n参照'
+    # コードブロック
+    - inside_code_block: true
+    # ファイル名・URL
+    - inside_url: true
+    - inside_file_path: true
+
+# R1: 質問・選択肢・確認依頼の検出
+r1_question_detection:
+  description: |
+    質問文・選択肢・確認依頼を検出。
+    検出された場合、人間判断カテゴリ（13個）のいずれかに分類できなければ BLOCK。
+  trigger_patterns:
+    - regex: '(どちらにしますか|どっちが|どれにしますか)'
+      type: explicit_question
+    - regex: '(\(A\).*\(B\)|①.*②.*どれ)'
+      type: choice_offer
+    - regex: '(判断ください|方針を|聞いてください|確認して|教えてください)'
+      type: confirmation_request
+    - regex: '(即決すべきなら|トム判断仰がず|爆速モード崩した自覚)'
+      type: forbidden_phrase
+      severity: block
+      message: 保留質問・自己申告は禁止。即決可否は管理クロード側で判断する。
+    - regex: '(念のため|一応|事前に潰して|保守的に|慎重を期して|調査だけ先に|方針確認してから|段取り感|安心感)'
+      type: temptation_word
+      severity: warn
+      message: 保守判断の誘惑ワード。即 GO 判定 4 項目に戻る。
+  classification:
+    enum_source: human_judgment_categories.yaml
+    fail_action: block
+    on_fail_message: |
+      この質問は人間判断カテゴリ（13個）に分類できません。
+      AI 即決領域の可能性が高い。質問せず即決してください。
+
+# R5: task_package schema 違反検出（自然文指示書の検出）
+r5_task_package_schema:
+  description: Claude Code への指示が schema に従っているか
+  trigger:
+    - context: instruction_to_claude_code
+  required_fields:
+    - parent_goal_id
+    - done_conditions
+    - allowed_scope
+    - judgment_authority
+    - report_schema_ref
+    - start_trigger
+  natural_language_indicators:
+    # これらが本文の冒頭にあると schema 違反の可能性が高い
+    - 'よろしく'
+    - '適当に'
+    - '対応してください'
+    - 'お願いします'
+  fail_action: warn
+  message: 指示書が task_package schema に従っていない可能性。schema 化してください。
+
+# R4: report_package schema 違反検出（証拠なし完了報告）
+r4_report_package_schema:
+  description: 完了報告が schema に従っているか
+  trigger:
+    - context: completion_report
+  required_fields:
+    - status
+    - evidence_urls
+    - tests_run
+    - ci_status
+  forbidden_patterns:
+    - regex: '✅\s*完了\s*$'
+      severity: block
+      message: 「✅ 完了」だけの報告は受理しない。evidence_urls / tests_run / ci_status を含めてください。
+    - regex: '画面表示\s*[OoＯ][KkＫ]'
+      severity: block
+      message: 自己申告の画面表示 OK は不可。スクショ URL またはブラウザテストログを添付。
+  fail_action: block
+
+# R2: 親ゴール外作業検出
+r2_scope_violation:
+  description: 出力中のタスク列挙が親ゴール Done 条件に対応するか
+  trigger:
+    - context: task_list_in_output
+    - context: implementation_plan
+  check:
+    method: parent_goal_done_condition_match
+    data_source: dev_backlog
+  fail_action: warn
+  message: |
+    このタスクは現在の親ゴール Done 条件に対応していない可能性があります。
+    backlog 起票のみに切り替えるか、ついで修正条件（7 項目）を満たしているか確認してください。
+
+  tsuide_modification_conditions:
+    description: 親ゴール外でも実行を許可する条件（全て満たす場合）
+    rules:
+      - 親ゴールと同じファイル、または同じテストに閉じる
+      - 追加差分が概ね 100 行以内
+      - DB schema / API contract / UX 方針を変えない
+      - 新規ライブラリを追加しない
+      - 本番データに触れない
+      - 30 分以内に完了見込み
+      - 着手前に 1 行宣言（dev_backlog またはログに記録）

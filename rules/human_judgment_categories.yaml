@@ -1,0 +1,143 @@
+# Human Judgment Categories — Tier 0 R1 検査用 enum
+# 2026-04-26 GPT セカンドオピニオン採用版（13 カテゴリ）
+#
+# 用途:
+# - Policy Gate R1 検査で、AI が出力する「質問」「選択肢」「確認依頼」を
+#   このカテゴリのいずれかに分類できなければ BLOCK する。
+# - Claude Code → 管理クロードの blocking_question にも適用。
+
+version: 1
+last_updated: 2026-04-26
+
+categories:
+
+  - id: parent_goal_change
+    label: 親ゴール確定・変更
+    description: 「今目先の親ゴール」を 1 つだけ Tom が確定する。AI からの提案は可、決定は Tom のみ。
+    examples:
+      - 新規親ゴールの設定
+      - 既存親ゴールの差し替え
+      - Done 条件の重大変更
+    ai_can_decide: false
+
+  - id: business_priority
+    label: 事業優先順位・リソース配分
+    examples:
+      - どのツールを先に直すか
+      - スタッフの稼働配分
+    ai_can_decide: false
+
+  - id: external_communication
+    label: 対外的判断
+    examples:
+      - 取引先・顧客・スタッフ・家族への対応方針
+      - 取引条件の交渉
+    ai_can_decide: false
+
+  - id: cost_commitment
+    label: コスト発生
+    examples:
+      - 新規 SaaS / API 契約
+      - 外注・業務委託
+      - 既存 API の上限変更（GPT 追加）
+    ai_can_decide: false
+
+  - id: ux_brand
+    label: ブランド・UX 好み（重大）
+    description: 既存パターン整合は AI 即決。ブランドトーン変更は人間判断。
+    examples_human:
+      - ブランドトーン変更
+      - ファーストビュー変更
+      - 料金・訴求文言
+      - 好みが分かれる配色・配置
+    examples_ai:
+      - 既存 UI パターンへの整合
+      - 表記ゆれ修正
+      - アクセシビリティ改善
+      - レスポンシブ崩れ修正
+    ai_can_decide_partial: true
+
+  - id: privacy_security
+    label: 個人情報・機密
+    examples:
+      - 外部公開可否
+      - データ保持期間
+    ai_can_decide: false
+
+  - id: permission_blocked
+    label: 権限上不可能（実行不能カテゴリ）
+    description: |
+      AI が聞くべきなのは「権限がないからやってください」ではなく
+      「この操作は人間実行キューに入れました」（GPT 指摘採用）
+    examples:
+      - GitHub Org 設定変更
+      - GCP コンソール操作
+      - 本番デプロイのトリガー
+    ai_can_decide: false
+    routing: human_execution_queue
+
+  - id: data_destructive
+    label: 本番データ破壊・大量更新（GPT 追加）
+    examples:
+      - DB migration（破壊的）
+      - delete / batch update（不可逆）
+    ai_can_decide: false
+
+  - id: security_iam
+    label: セキュリティ・権限変更（GPT 追加）
+    examples:
+      - API key の rotation 以外の変更
+      - OAuth scope 変更
+      - IAM ロール変更
+      - GitHub 権限変更
+    ai_can_decide: false
+
+  - id: legal_compliance
+    label: 法務・規約・コンプライアンス（GPT 追加）
+    examples:
+      - 個人情報の扱い変更
+      - 外部サービス規約の解釈
+      - 著作権
+      - 利用規約変更
+    ai_can_decide: false
+
+  - id: public_communication
+    label: 公開物・対外発信（GPT 追加）
+    examples:
+      - LP / メール / 顧客向け説明
+      - SNS / 営業資料
+    ai_can_decide: false
+
+  - id: budget_quota
+    label: 予算・課金上限変更（GPT 追加）
+    examples:
+      - 新規契約の予算
+      - 既存 API の上限変更
+      - 月額予算の変更
+    ai_can_decide: false
+
+  - id: hr_evaluation
+    label: 人間関係・採用・評価（GPT 追加）
+    examples:
+      - 評価
+      - 契約
+      - 採用
+      - スタッフへの指示変更
+    ai_can_decide: false
+
+
+# AI 即決領域（このカテゴリに該当しないものは AI が即決する）
+ai_decision_examples:
+  - 技術選択（実装手段・ライブラリ・アーキテクチャ細部）
+  - 既存ルールの適用解釈
+  - 既決ゴール内のタスク優先順位
+  - 寝かせ中タスクの起動判断（親ゴール達成に必要な前提なら起こす）
+  - DB 裏取り、調査、ガイド検索
+  - Phase / Step 分割の要否
+  - Gemini セカンドオピニオン要否
+  - バグ調査の真因確定順序
+  - 単発バグ修正の手段
+  - リファクタリング判断
+  - 型エラー・ビルドエラー対応
+  - 影響範囲調査
+  - セルフレビューでの再修正

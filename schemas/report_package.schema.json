@@ -1,0 +1,197 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/originaiagent/origin-policy/schemas/report_package.schema.json",
+  "title": "Report Package — Claude Code → 管理クロード 完了報告",
+  "description": "Tier 0 R4 検査対象。証拠なし報告は受理しない。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_package_id",
+    "status",
+    "evidence_urls",
+    "tests_run",
+    "ci_status",
+    "self_check"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "task_package_id": {
+      "type": "string",
+      "description": "対応する task_package の ID。"
+    },
+    "parent_goal_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["done", "blocked", "failed", "partial"],
+      "description": "完了ステータス。"
+    },
+    "summary": {
+      "type": "string",
+      "description": "実施した作業の要約（非エンジニア語、3〜5 行）。"
+    },
+    "evidence_urls": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["type", "url"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["pr", "commit", "deploy", "dashboard", "log", "screenshot", "browser_test", "db_query"]
+          },
+          "url": { "type": "string", "format": "uri" },
+          "description": { "type": "string" }
+        }
+      },
+      "description": "裏取り証拠の URL リスト。最低 1 個必須。"
+    },
+    "tests_run": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "result"],
+        "properties": {
+          "name": { "type": "string" },
+          "method": {
+            "type": "string",
+            "enum": ["curl", "playwright", "pytest", "jest", "sql", "manual_browser", "lighthouse"]
+          },
+          "result": {
+            "type": "string",
+            "enum": ["pass", "fail", "skip", "warn"]
+          },
+          "details": { "type": "string" }
+        }
+      }
+    },
+    "ci_status": {
+      "type": "object",
+      "required": ["status", "verified_at_source"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["green", "red", "pending", "no_ci"]
+        },
+        "verified_at_source": {
+          "type": "string",
+          "description": "GitHub API 等の実態確認元 URL。「PR ページの merged 表示」だけは不可。"
+        },
+        "base_branch": {
+          "type": "string",
+          "description": "merge 先 branch 名。main/master/production でなければ追加 PR が必要。"
+        }
+      }
+    },
+    "db_diffs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["table", "operation"],
+        "properties": {
+          "table": { "type": "string" },
+          "operation": { "type": "string", "enum": ["insert", "update", "delete", "ddl"] },
+          "before_query": { "type": "string" },
+          "after_query": { "type": "string" },
+          "rows_affected": { "type": "integer" }
+        }
+      },
+      "description": "DB 変更の before/after 証拠。破壊的変更時は必須。"
+    },
+    "production_smoke_test_recipe": {
+      "type": "object",
+      "description": "本番疎通テストレシピ（実コードベースで明示）",
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "menu_path": { "type": "string", "description": "画面到達経路（メニュー名）" },
+        "screen_file": { "type": "string", "description": "対応するソースファイル" },
+        "operation_steps": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "expected_result": { "type": "string" }
+      }
+    },
+    "self_check": {
+      "type": "object",
+      "required": ["build", "ui", "feature", "regression", "errors"],
+      "properties": {
+        "build": { "type": "string", "enum": ["pass", "fail"] },
+        "ui": { "type": "string", "enum": ["pass", "fail", "n/a"] },
+        "feature": { "type": "string", "enum": ["pass", "fail"] },
+        "regression": { "type": "string", "enum": ["pass", "fail"] },
+        "errors": { "type": "string", "enum": ["pass", "fail"] }
+      }
+    },
+    "tom_action_required": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["category", "action"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "parent_goal_change",
+              "business_priority",
+              "external_communication",
+              "cost_commitment",
+              "ux_brand",
+              "privacy_security",
+              "permission_blocked",
+              "data_destructive",
+              "security_iam",
+              "legal_compliance",
+              "public_communication",
+              "budget_quota",
+              "hr_evaluation"
+            ]
+          },
+          "action": { "type": "string" },
+          "non_engineer_steps": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "非エンジニア語の操作手順（画面名・ボタン名・URL のみ、3-5 ステップ以内）"
+          }
+        }
+      }
+    },
+    "blocking_question": {
+      "type": "object",
+      "description": "Claude Code からの質問（人間判断カテゴリのみ）。それ以外は AI 即決すべき。",
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "parent_goal_change",
+            "business_priority",
+            "external_communication",
+            "cost_commitment",
+            "ux_brand",
+            "privacy_security",
+            "permission_blocked",
+            "data_destructive",
+            "security_iam",
+            "legal_compliance",
+            "public_communication",
+            "budget_quota",
+            "hr_evaluation"
+          ]
+        },
+        "question": { "type": "string" },
+        "proposed_default": {
+          "type": "string",
+          "description": "AI が想定する既定値。Tom が応答しない場合に使う。"
+        },
+        "why_blocking": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

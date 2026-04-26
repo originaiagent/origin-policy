@@ -1,0 +1,202 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/originaiagent/origin-policy/schemas/task_package.schema.json",
+  "title": "Task Package — 管理クロード → Claude Code 指示書",
+  "description": "管理クロードが Claude Code に投入する指示書の構造。Tier 0 R5 検査対象。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "parent_goal_id",
+    "tool_name",
+    "title",
+    "done_conditions",
+    "allowed_scope",
+    "judgment_authority",
+    "report_schema_ref",
+    "start_trigger"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "parent_goal_id": {
+      "type": "string",
+      "description": "dev_backlog の親ゴール ID（UUID）。必須。"
+    },
+    "parent_goal_title": {
+      "type": "string",
+      "description": "親ゴールのタイトル（人間可読）。"
+    },
+    "tool_name": {
+      "type": "string",
+      "description": "対象ツール名（origin-core, origin-ai, ec-manager 等）。"
+    },
+    "title": {
+      "type": "string",
+      "description": "このタスクのタイトル（短く）。"
+    },
+    "context": {
+      "type": "object",
+      "description": "前提情報。設計思想、関連 guides、依存 PR 等。",
+      "properties": {
+        "design_principles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "関連する設計原則の slug 配列（例: ai-centralization-invocation-pattern）。"
+        },
+        "related_guides": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "参照すべき guides slug 配列。"
+        },
+        "depends_on_prs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "前提となる PR の URL または番号。"
+        },
+        "current_state": {
+          "type": "string",
+          "description": "現在の状態（DB 実データ引用、未済は ※推定 と明記）。"
+        }
+      }
+    },
+    "done_conditions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "maxItems": 5,
+      "description": "Done 条件（3〜5 項目以内）。これを満たしたら即停止。"
+    },
+    "allowed_scope": {
+      "type": "object",
+      "required": ["files", "operations"],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "触ってよいファイル / ディレクトリのパターン。"
+        },
+        "operations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "許可される操作（例: read, write, db_select, db_update, deploy_dev）。"
+        }
+      }
+    },
+    "prohibited_scope": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "operations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "禁止操作（例: deploy_production, db_drop, force_push）。"
+        }
+      }
+    },
+    "required_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "method"],
+        "properties": {
+          "name": { "type": "string" },
+          "method": { "type": "string", "description": "curl / playwright / pytest / sql 等" },
+          "expected": { "type": "string" }
+        }
+      }
+    },
+    "judgment_authority": {
+      "type": "object",
+      "required": ["ai_can_decide", "human_required"],
+      "properties": {
+        "ai_can_decide": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "AI 即決可能な判断項目。"
+        },
+        "human_required": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["category", "reason"],
+            "properties": {
+              "category": {
+                "type": "string",
+                "enum": [
+                  "parent_goal_change",
+                  "business_priority",
+                  "external_communication",
+                  "cost_commitment",
+                  "ux_brand",
+                  "privacy_security",
+                  "permission_blocked",
+                  "data_destructive",
+                  "security_iam",
+                  "legal_compliance",
+                  "public_communication",
+                  "budget_quota",
+                  "hr_evaluation"
+                ]
+              },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "premise_drift_handling": {
+      "type": "object",
+      "description": "前提ズレ時の自走ルール",
+      "properties": {
+        "fatal_categories": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "致命的な前提ズレ（停止して報告）"
+        },
+        "non_fatal_action": {
+          "type": "string",
+          "default": "実態優先で続行、判断ログを report に記録"
+        }
+      }
+    },
+    "batch_question_policy": {
+      "type": "object",
+      "description": "Claude Code からの質問のバッチ化ポリシー",
+      "properties": {
+        "batch_size": { "type": "integer", "default": 5 },
+        "interval_minutes": { "type": "integer", "default": 30 }
+      }
+    },
+    "report_schema_ref": {
+      "type": "string",
+      "description": "完了報告の schema 参照（例: report_package.schema.json#v1）。"
+    },
+    "start_trigger": {
+      "type": "string",
+      "description": "実行開始のトリガー文言（例: 'この指示書を受け取ったら即着手。資料共有ではない。'）"
+    },
+    "report_frequency": {
+      "type": "string",
+      "enum": ["pr_complete_only", "phase_boundary", "step_by_step"],
+      "default": "pr_complete_only",
+      "description": "報告頻度。デフォルトは PR 完了時 1 回のみ（爆速ノンストップモード）。"
+    },
+    "parallel_workers": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 1,
+      "description": "並列ワーカー数（worktree 分離前提）。"
+    },
+    "worktree_setup": {
+      "type": "string",
+      "description": "並列実行時の worktree セットアップコマンド（コピペ可能）。"
+    }
+  },
+  "additionalProperties": false
+}
