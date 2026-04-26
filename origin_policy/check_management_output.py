@@ -108,6 +108,13 @@ def main(argv: list[str] | None = None) -> int:
                 sys.stdin.reconfigure(encoding="utf-8")
             except Exception:
                 pass
+        # Avoid silently hanging when invoked interactively without a pipe.
+        if sys.stdin.isatty():
+            print(
+                "stdin から検査対象テキストを読みます。終了は Ctrl-D。"
+                "（パイプ・リダイレクトなしで起動した場合のみ表示）",
+                file=sys.stderr,
+            )
         text = sys.stdin.read()
 
     text = text.replace("\r\n", "\n")

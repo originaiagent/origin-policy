@@ -63,29 +63,40 @@
 # 入力: 選択されたテキスト (stdin)
 # 動作: origin_policy.check_management_output で検査し、結果を通知センターへ。
 #
-# install.sh が ORIGIN_POLICY_REPO を環境変数に書き込むことを期待する。
-# 未設定なら ~/dev/origin-policy をデフォルトとする。
-REPO="${ORIGIN_POLICY_REPO:-$HOME/dev/origin-policy}"
-PYTHON_BIN="${ORIGIN_POLICY_PYTHON:-/usr/bin/python3}"
+# install.sh が下の __ORIGIN_POLICY_REPO__ / __ORIGIN_POLICY_PYTHON__ を
+# 絶対パスへ sed 置換する。未置換 (ソースのまま実行) のときはフォールバックを使用。
+REPO_PLACEHOLDER="__ORIGIN_POLICY_REPO__"
+PYTHON_PLACEHOLDER="__ORIGIN_POLICY_PYTHON__"
+case "$REPO_PLACEHOLDER" in
+    __ORIGIN_POLICY_REPO__) REPO="${ORIGIN_POLICY_REPO:-$HOME/dev/origin-policy}" ;;
+    *) REPO="$REPO_PLACEHOLDER" ;;
+esac
+case "$PYTHON_PLACEHOLDER" in
+    __ORIGIN_POLICY_PYTHON__) PYTHON_BIN="${ORIGIN_POLICY_PYTHON:-/usr/bin/python3}" ;;
+    *) PYTHON_BIN="$PYTHON_PLACEHOLDER" ;;
+esac
 
 OUTPUT=$(cat | PYTHONPATH="$REPO" "$PYTHON_BIN" -m origin_policy.check_management_output 2>&amp;1)
 EXIT=$?
 
 # Truncate to fit notification (display notification limit ≈ 256 chars).
-SHORT=$(printf '%s' "$OUTPUT" | head -c 240 | tr '\n' ' ' | sed 's/"/\\"/g')
+SHORT=$(printf '%s' "$OUTPUT" | head -c 240 | tr '\n' ' ')
 
-if [ "$EXIT" -eq 1 ]; then
-    TITLE="Policy Gate: BLOCK"
-    SUBTITLE="違反が検出されました"
-elif printf '%s' "$OUTPUT" | grep -q WARN; then
-    TITLE="Policy Gate: WARN"
-    SUBTITLE="警告"
-else
-    TITLE="Policy Gate: PASS"
-    SUBTITLE=""
-fi
+case "$EXIT" in
+    1) TITLE="Policy Gate: BLOCK"; SUBTITLE="違反が検出されました" ;;
+    *) if printf '%s' "$OUTPUT" | grep -q '^\[Policy Gate\] WARN'; then
+           TITLE="Policy Gate: WARN"; SUBTITLE="警告"
+       else
+           TITLE="Policy Gate: PASS"; SUBTITLE=""
+       fi ;;
+esac
 
-osascript -e "display notification \"$SHORT\" with title \"$TITLE\" subtitle \"$SUBTITLE\""
+# Pass strings as argv to osascript to avoid quoting / backslash injection.
+osascript \
+    -e 'on run argv' \
+    -e 'display notification (item 1 of argv) with title (item 2 of argv) subtitle (item 3 of argv)' \
+    -e 'end run' \
+    -- "$SHORT" "$TITLE" "$SUBTITLE"
 echo "$OUTPUT"
 </string>
 					<key>CheckedForUserDefaultShell</key>

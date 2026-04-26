@@ -6,9 +6,9 @@
 #   ./install.sh                       # auto-detect repo root (parent of scripts/)
 #   ORIGIN_POLICY_REPO=~/dev/origin-policy ./install.sh
 #
-# Sets ORIGIN_POLICY_REPO and ORIGIN_POLICY_PYTHON for the Quick Action via
-# launchctl setenv (persists for the current login session). Re-run after a
-# reboot or set them in ~/.zprofile / ~/.zshrc and re-login for permanence.
+# Bakes the absolute paths to the repo and python interpreter directly into the
+# *installed* workflow (the source workflow keeps the placeholders so the repo
+# stays portable). No env-var dependence at runtime — survives reboots.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,22 +31,34 @@ if ! "$PYTHON_BIN" -c "import yaml, jsonschema" >/dev/null 2>&1; then
     exit 1
 fi
 
+# Escape paths for use as a sed replacement (escape backslash, ampersand, and pipe-delimiter).
+sed_escape() {
+    printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'
+}
+REPO_ESC="$(sed_escape "$REPO")"
+PY_ESC="$(sed_escape "$PYTHON_BIN")"
+
 mkdir -p "$SERVICES_DIR"
 rm -rf "$WORKFLOW_DST"
 cp -R "$WORKFLOW_SRC" "$WORKFLOW_DST"
 
-launchctl setenv ORIGIN_POLICY_REPO "$REPO"
-launchctl setenv ORIGIN_POLICY_PYTHON "$PYTHON_BIN"
+WFLOW="$WORKFLOW_DST/Contents/document.wflow"
+sed -i '' \
+    -e "s|__ORIGIN_POLICY_REPO__|$REPO_ESC|g" \
+    -e "s|__ORIGIN_POLICY_PYTHON__|$PY_ESC|g" \
+    "$WFLOW"
+
+# Verify substitution actually happened — guard against placeholder leftovers.
+if grep -q '__ORIGIN_POLICY_REPO__\|__ORIGIN_POLICY_PYTHON__' "$WFLOW"; then
+    echo "✗ Placeholder substitution failed in $WFLOW" >&2
+    exit 1
+fi
 
 echo "✓ Installed: $WORKFLOW_DST"
-echo "  ORIGIN_POLICY_REPO=$REPO"
-echo "  ORIGIN_POLICY_PYTHON=$PYTHON_BIN"
+echo "  REPO=$REPO"
+echo "  PYTHON=$PYTHON_BIN"
 echo
 echo "次の手順:"
 echo "  1. システム設定 → キーボード → キーボードショートカット → サービス"
-echo "  2. テキスト > 'Policy Gate で検査' を有効化"
+echo "  2. テキスト > 'Policy Gate で検査' を有効化（任意でショートカットキー割当）"
 echo "  3. 任意のテキスト選択 → 右クリック → サービス → 'Policy Gate で検査'"
-echo
-echo "永続化したい場合は ~/.zprofile に追記:"
-echo "  export ORIGIN_POLICY_REPO=\"$REPO\""
-echo "  export ORIGIN_POLICY_PYTHON=\"$PYTHON_BIN\""

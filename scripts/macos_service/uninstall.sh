@@ -11,6 +11,6 @@ else
     echo "(not installed: $WORKFLOW_DST)"
 fi
 
+# Clear any legacy launchctl env vars from prior installs (no-op if absent).
 launchctl unsetenv ORIGIN_POLICY_REPO 2>/dev/null || true
 launchctl unsetenv ORIGIN_POLICY_PYTHON 2>/dev/null || true
-echo "✓ launchctl env vars cleared."

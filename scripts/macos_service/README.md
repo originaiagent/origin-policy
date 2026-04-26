@@ -20,9 +20,14 @@ cd scripts/macos_service
 ORIGIN_POLICY_REPO=~/dev/origin-policy ORIGIN_POLICY_PYTHON=/usr/bin/python3 ./install.sh
 ```
 
+`install.sh` はリポと Python インタプリタの絶対パスを `~/Library/Services/` に
+コピーしたワークフローへ直接書き込む（再起動後も有効）。ソース側の `.workflow`
+はプレースホルダ (`__ORIGIN_POLICY_REPO__` / `__ORIGIN_POLICY_PYTHON__`) のまま。
+
 インストール後、`システム設定 → キーボード → キーボードショートカット → サービス` で
 "Policy Gate で検査" を有効化してください（macOS Sonoma 以降は `システム設定 → キーボード →
 キーボードショートカット → サービス → テキスト` 配下）。
+ショートカットキー（例: ⌃⌥⌘P）を割り当てると右クリックなしで実行できる。
 
 ## 動作
 
@@ -33,15 +38,6 @@ ORIGIN_POLICY_REPO=~/dev/origin-policy ORIGIN_POLICY_PYTHON=/usr/bin/python3 ./i
    - 違反あり: タイトル "Policy Gate: BLOCK"
    - 警告のみ: "Policy Gate: WARN"
    - 違反なし: "Policy Gate: PASS"
-
-## 永続化
-
-`launchctl setenv` はログイン中のみ有効。再起動後も有効にするには `~/.zprofile` に追記:
-
-```bash
-export ORIGIN_POLICY_REPO="$HOME/dev/origin-policy"
-export ORIGIN_POLICY_PYTHON="/usr/bin/python3"
-```
 
 ## アンインストール
 
@@ -60,4 +56,4 @@ echo "テキスト" | ./linux_fallback.sh --stdin
 
 - 通知が出ない → `osascript -e 'display notification "test" with title "test"'` で通知許可を確認
 - "module not found" → `/usr/bin/python3 -m pip install pyyaml jsonschema`
-- 環境変数が読まれない → `launchctl getenv ORIGIN_POLICY_REPO` で確認、なければ `install.sh` 再実行
+- パスがズレた / リポを移動した → `install.sh` を再実行（最新パスが workflow に焼かれる）
