@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import plotly.express as px
@@ -23,7 +24,7 @@ st.set_page_config(
     layout="wide",
 )
 
-JST = timezone(timedelta(hours=9))
+JST = ZoneInfo("Asia/Tokyo")
 
 PERIOD_OPTIONS = {
     "7d": 7,
@@ -31,9 +32,6 @@ PERIOD_OPTIONS = {
     "90d": 90,
     "all": None,
 }
-
-RULE_IDS = ["R1", "R2", "R3", "R4", "R5", "bakuso_phrase", "unknown"]
-SOURCES = ["chrome_extension", "stop_hook", "cli_wrapper", "question_router", "report_validator"]
 
 
 @st.cache_resource
@@ -50,13 +48,26 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-def _select_all(table: str) -> list[dict[str, Any]]:
+def _fetch_paginated(
+    table: str,
+    *,
+    time_col: str | None = None,
+    since: datetime | None = None,
+) -> list[dict[str, Any]]:
     client = get_supabase_client()
     rows: list[dict[str, Any]] = []
     page_size = 1000
     offset = 0
     while True:
-        resp = client.table(table).select("*").range(offset, offset + page_size - 1).execute()
+        try:
+            q = client.table(table).select("*")
+            if time_col and since is not None:
+                q = q.gte(time_col, since.isoformat())
+            resp = q.range(offset, offset + page_size - 1).execute()
+        except Exception as exc:
+            raise RuntimeError(
+                f"{table} の取得中にエラー (offset={offset}): {type(exc).__name__}: {exc}"
+            ) from exc
         chunk = resp.data or []
         rows.extend(chunk)
         if len(chunk) < page_size:
@@ -66,8 +77,10 @@ def _select_all(table: str) -> list[dict[str, Any]]:
 
 
 @st.cache_data(ttl=60)
-def fetch_violations() -> pd.DataFrame:
-    rows = _select_all("policy_violations")
+def fetch_violations(period_key: str) -> pd.DataFrame:
+    days = PERIOD_OPTIONS.get(period_key)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
+    rows = _fetch_paginated("policy_violations", time_col="occurred_at", since=since)
     df = pd.DataFrame(rows)
     if df.empty:
         return df
@@ -78,57 +91,24 @@ def fetch_violations() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=60)
-def fetch_daily_view() -> pd.DataFrame:
-    rows = _select_all("v_policy_violations_daily")
-    df = pd.DataFrame(rows)
-    if not df.empty and "day" in df.columns:
-        df["day"] = pd.to_datetime(df["day"], errors="coerce")
-    return df
-
-
-@st.cache_data(ttl=60)
 def fetch_pr_impact() -> pd.DataFrame:
-    rows = _select_all("v_policy_violations_pr_impact")
+    rows = _fetch_paginated("v_policy_violations_pr_impact")
     return pd.DataFrame(rows)
 
 
 def apply_filters(
     df: pd.DataFrame,
-    period_key: str,
     tool_names: list[str],
     rule_ids: list[str],
-    time_col: str = "occurred_at",
 ) -> pd.DataFrame:
     if df.empty:
         return df
     out = df
-    days = PERIOD_OPTIONS.get(period_key)
-    if days is not None and time_col in out.columns:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        out = out[out[time_col] >= cutoff]
     if tool_names and "tool_name" in out.columns:
         out = out[out["tool_name"].isin(tool_names)]
     if rule_ids and "rule_id" in out.columns:
         out = out[out["rule_id"].isin(rule_ids)]
     return out
-
-
-def render_sidebar(df: pd.DataFrame) -> tuple[str, list[str], list[str]]:
-    st.sidebar.header("フィルタ")
-    period = st.sidebar.radio("期間", list(PERIOD_OPTIONS.keys()), index=1, horizontal=True)
-
-    tool_choices = sorted(df["tool_name"].dropna().unique().tolist()) if not df.empty else []
-    tools = st.sidebar.multiselect("tool_name", tool_choices, default=[])
-
-    rule_choices = RULE_IDS
-    rules = st.sidebar.multiselect("rule_id", rule_choices, default=[])
-
-    if st.sidebar.button("再読み込み"):
-        st.cache_data.clear()
-        st.rerun()
-
-    st.sidebar.caption("読み取り元: origin-core / policy_violations")
-    return period, tools, rules
 
 
 def render_overview(filtered: pd.DataFrame) -> None:
@@ -255,18 +235,33 @@ def main() -> None:
     st.title(":shield: Policy Gate Violation Dashboard")
     st.caption("origin-core / policy_violations を集計。Phase 3 Lane 4。")
 
+    st.sidebar.header("フィルタ")
+    period = st.sidebar.radio("期間", list(PERIOD_OPTIONS.keys()), index=1, horizontal=True)
+
     try:
-        violations = fetch_violations()
+        violations = fetch_violations(period)
         pr_impact = fetch_pr_impact()
     except Exception as exc:
         st.error(
-            "DB 接続に失敗しました。SUPABASE_URL / SUPABASE_SERVICE_KEY を確認してください。\n"
+            "DB 接続/クエリに失敗しました。SUPABASE_URL / SUPABASE_SERVICE_KEY を確認してください。\n"
             f"詳細: {type(exc).__name__}: {exc}"
         )
         st.stop()
 
-    period, tools, rules = render_sidebar(violations)
-    filtered = apply_filters(violations, period, tools, rules)
+    tool_choices = sorted(violations["tool_name"].dropna().unique().tolist()) if not violations.empty else []
+    tools = st.sidebar.multiselect("tool_name", tool_choices, default=[])
+
+    rule_choices = sorted(violations["rule_id"].dropna().unique().tolist()) if not violations.empty else []
+    rules = st.sidebar.multiselect("rule_id", rule_choices, default=[])
+
+    if st.sidebar.button("再読み込み"):
+        st.cache_data.clear()
+        st.rerun()
+
+    st.sidebar.caption("読み取り元: origin-core / policy_violations")
+    st.sidebar.caption(f"取得済 {len(violations)} 件 (server-side period filter)")
+
+    filtered = apply_filters(violations, tools, rules)
 
     tab_overview, tab_pr, tab_recent = st.tabs(["Overview", "PR Impact", "Recent Violations"])
     with tab_overview:

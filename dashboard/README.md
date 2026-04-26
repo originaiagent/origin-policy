@@ -33,7 +33,8 @@ pip install -r dashboard/requirements.txt
 SUPABASE_URL=https://fqzsxjhhdzrliuuooqic.supabase.co
 SUPABASE_SERVICE_KEY=<service_role_key>
 ```
-RLS は anon 全許可なので `SUPABASE_ANON_KEY` でも動作する（その場合は `SUPABASE_ANON_KEY` を設定）。
+RLS は anon SELECT のみ許可、書き込みは `service_role` 必須（`20260426_policy_violations_rls_tighten.sql`）。
+ダッシュボードは読み取り専用なので `SUPABASE_ANON_KEY` でも動く。書き込み（Lane 1/2/3）側は `SUPABASE_SERVICE_KEY` を使う。
 
 ### 3. 起動
 ```bash
@@ -49,8 +50,10 @@ psql "$DATABASE_URL" -f dashboard/seed.sql
 または Supabase SQL Editor に貼り付けて実行。
 
 ## マイグレーション
-スキーマは `migrations/20260426_policy_violations.sql`。
-適用済（origin-core, project_id: `fqzsxjhhdzrliuuooqic`）。
+- `migrations/20260426_policy_violations.sql` — テーブル + 2 ビュー
+- `migrations/20260426_policy_violations_rls_tighten.sql` — anon を SELECT のみに絞る
+
+両方適用済（origin-core, project_id: `fqzsxjhhdzrliuuooqic`）。
 
 ## DB 失敗時のフォールバック
 `SUPABASE_URL` / KEY 未設定・接続失敗時は `st.error` バナーを出して停止する（クラッシュはしない）。
