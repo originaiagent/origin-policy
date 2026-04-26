@@ -1,0 +1,140 @@
+/* Origin Policy Gate — banner & highlight overlay */
+
+.__pgate-banner {
+  display: block;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #ffffff;
+  z-index: 2147483600;
+  position: relative;
+}
+
+.__pgate-banner.__pgate-block {
+  background: #c0392b;
+  border-left: 4px solid #7d1f15;
+}
+
+.__pgate-banner.__pgate-warn {
+  background: #d4a017;
+  border-left: 4px solid #8a6a0e;
+  color: #1a1a1a;
+}
+
+.__pgate-banner strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.__pgate-banner .__pgate-detail {
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 6px;
+  opacity: 0.9;
+}
+
+.__pgate-banner .__pgate-bypass {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: inherit;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.__pgate-banner .__pgate-bypass:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.__pgate-mark {
+  background: #ffeb3b;
+  color: #000;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+/* Copy-confirm modal */
+
+.__pgate-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+}
+
+.__pgate-modal {
+  background: #ffffff;
+  color: #111111;
+  max-width: 480px;
+  width: 90%;
+  border-radius: 8px;
+  padding: 20px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  .__pgate-modal {
+    background: #2a2a2a;
+    color: #f0f0f0;
+  }
+}
+
+.__pgate-modal h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #c0392b;
+}
+
+.__pgate-modal p {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.__pgate-modal ul {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.__pgate-modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.__pgate-modal-buttons button {
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+
+.__pgate-modal-buttons .__pgate-cancel {
+  background: #ecf0f1;
+  color: #2c3e50;
+}
+
+.__pgate-modal-buttons .__pgate-confirm {
+  background: #c0392b;
+  color: #ffffff;
+}
+
+.__pgate-modal-buttons button:hover {
+  filter: brightness(0.95);
+}
