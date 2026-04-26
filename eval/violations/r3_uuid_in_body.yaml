@@ -1,0 +1,11 @@
+id: r3_uuid_in_body_001
+rule: R3
+input_type: management_output
+description: |
+  本文中に full UUID が露出。末尾「参照」欄ではないため BLOCK。
+input: |
+  task ID 12345678-1234-5678-9abc-def012345678 のレコードを更新してください
+expected:
+  status: BLOCK
+  detected_rules: [R3]
+  detected_patterns: [full_uuid]
