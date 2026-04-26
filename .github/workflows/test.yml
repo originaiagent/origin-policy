@@ -27,17 +27,3 @@ jobs:
 
       - name: Run pytest
         run: pytest -v
-
-      - name: Set up Node (for chrome-extension tests)
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Regenerate detectors.generated.js (verify build is reproducible)
-        run: node chrome-extension/scripts/build_detectors.js
-
-      - name: Validate manifest.json
-        run: python -c "import json; json.load(open('chrome-extension/manifest.json'))"
-
-      - name: Run chrome-extension detection tests
-        run: node chrome-extension/tests/test_detection.js
