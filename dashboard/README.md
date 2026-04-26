@@ -33,8 +33,9 @@ pip install -r dashboard/requirements.txt
 SUPABASE_URL=https://fqzsxjhhdzrliuuooqic.supabase.co
 SUPABASE_SERVICE_KEY=<service_role_key>
 ```
-RLS は anon SELECT のみ許可、書き込みは `service_role` 必須（`20260426_policy_violations_rls_tighten.sql`）。
-ダッシュボードは読み取り専用なので `SUPABASE_ANON_KEY` でも動く。書き込み（Lane 1/2/3）側は `SUPABASE_SERVICE_KEY` を使う。
+
+`SUPABASE_SERVICE_KEY` は **必須**。RLS は `authenticated` SELECT のみ、anon は読めない（excerpt が機微の可能性があるため）。
+service_role キーは RLS をバイパスするので、**ローカル運用専用**で扱い、リモートにデプロイする場合は専用 read-only ロールに置き換えること。
 
 ### 3. 起動
 ```bash

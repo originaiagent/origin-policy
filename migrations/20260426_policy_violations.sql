@@ -50,13 +50,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS policy_violations_updated_at ON policy_violations;
 CREATE TRIGGER policy_violations_updated_at
   BEFORE UPDATE ON policy_violations
   FOR EACH ROW EXECUTE FUNCTION update_policy_violations_updated_at();
 
--- RLS（origin-core の他テーブルと同方針、anon 全許可）
+-- RLS は次の migration (20260426_policy_violations_rls_tighten.sql) で確定する。
+-- ここでは RLS のみ有効化。
 ALTER TABLE policy_violations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all for anon" ON policy_violations FOR ALL TO anon USING (true) WITH CHECK (true);
 
 -- 集計ビュー
 CREATE OR REPLACE VIEW v_policy_violations_daily AS

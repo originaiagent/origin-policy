@@ -34,16 +34,25 @@ PERIOD_OPTIONS = {
 }
 
 
+MAX_ROWS = 5000
+
+
 @st.cache_resource
 def get_supabase_client():
-    """Single Supabase client per Streamlit process."""
+    """Single Supabase client per Streamlit process.
+
+    SUPABASE_SERVICE_KEY is required because RLS only grants SELECT to `authenticated`.
+    The dashboard is an admin-internal tool; do not expose this credential outside the
+    operator's local machine.
+    """
     from supabase import create_client
 
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_KEY")
     if not url or not key:
         raise RuntimeError(
-            "SUPABASE_URL と SUPABASE_SERVICE_KEY (または SUPABASE_ANON_KEY) を環境変数に設定してください。"
+            "SUPABASE_URL と SUPABASE_SERVICE_KEY を環境変数に設定してください。"
+            " RLS が authenticated 限定のため anon key は使えません。"
         )
     return create_client(url, key)
 
@@ -53,11 +62,17 @@ def _fetch_paginated(
     *,
     time_col: str | None = None,
     since: datetime | None = None,
-) -> list[dict[str, Any]]:
+    limit: int = MAX_ROWS,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Fetch rows in pages. Returns (rows, truncated_flag).
+
+    truncated_flag is True when the limit was reached and more rows likely exist.
+    """
     client = get_supabase_client()
     rows: list[dict[str, Any]] = []
     page_size = 1000
     offset = 0
+    truncated = False
     while True:
         try:
             q = client.table(table).select("*")
@@ -70,29 +85,36 @@ def _fetch_paginated(
             ) from exc
         chunk = resp.data or []
         rows.extend(chunk)
+        if len(rows) >= limit:
+            rows = rows[:limit]
+            if len(chunk) == page_size:
+                truncated = True
+            break
         if len(chunk) < page_size:
             break
         offset += page_size
-    return rows
+    return rows, truncated
 
 
 @st.cache_data(ttl=60)
-def fetch_violations(period_key: str) -> pd.DataFrame:
+def fetch_violations(period_key: str) -> tuple[pd.DataFrame, bool]:
     days = PERIOD_OPTIONS.get(period_key)
     since = datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
-    rows = _fetch_paginated("policy_violations", time_col="occurred_at", since=since)
+    rows, truncated = _fetch_paginated(
+        "policy_violations", time_col="occurred_at", since=since
+    )
     df = pd.DataFrame(rows)
     if df.empty:
-        return df
+        return df, truncated
     for col in ("occurred_at", "resolved_at", "created_at", "updated_at"):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], utc=True, errors="coerce")
-    return df
+    return df, truncated
 
 
 @st.cache_data(ttl=60)
 def fetch_pr_impact() -> pd.DataFrame:
-    rows = _fetch_paginated("v_policy_violations_pr_impact")
+    rows, _ = _fetch_paginated("v_policy_violations_pr_impact")
     return pd.DataFrame(rows)
 
 
@@ -121,8 +143,12 @@ def render_overview(filtered: pd.DataFrame) -> None:
 
     total = len(filtered)
     blocked = int(filtered["blocked"].sum()) if "blocked" in filtered.columns else 0
-    interrupts = int((filtered.get("resolution") == "tom_interrupt").sum())
-    pending = int((filtered.get("resolution") == "pending").sum())
+    if "resolution" in filtered.columns:
+        interrupts = int(filtered["resolution"].eq("tom_interrupt").sum())
+        pending = int(filtered["resolution"].eq("pending").sum())
+    else:
+        interrupts = 0
+        pending = 0
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("総違反", total)
@@ -153,7 +179,10 @@ def render_overview(filtered: pd.DataFrame) -> None:
 
     with left2:
         st.subheader("③ tom_interrupt 件数の日次推移")
-        ti = filtered[filtered["resolution"] == "tom_interrupt"]
+        if "resolution" in filtered.columns:
+            ti = filtered[filtered["resolution"] == "tom_interrupt"]
+        else:
+            ti = filtered.iloc[0:0]
         if ti.empty:
             st.caption("tom_interrupt の記録がありません。")
         else:
@@ -239,7 +268,7 @@ def main() -> None:
     period = st.sidebar.radio("期間", list(PERIOD_OPTIONS.keys()), index=1, horizontal=True)
 
     try:
-        violations = fetch_violations(period)
+        violations, truncated = fetch_violations(period)
         pr_impact = fetch_pr_impact()
     except Exception as exc:
         st.error(
@@ -247,6 +276,11 @@ def main() -> None:
             f"詳細: {type(exc).__name__}: {exc}"
         )
         st.stop()
+
+    if truncated:
+        st.warning(
+            f"取得件数が上限 ({MAX_ROWS}) に達しました。期間フィルタを狭めるか、ビュー側で集計するクエリに切り替えてください。"
+        )
 
     tool_choices = sorted(violations["tool_name"].dropna().unique().tolist()) if not violations.empty else []
     tools = st.sidebar.multiselect("tool_name", tool_choices, default=[])
@@ -259,7 +293,9 @@ def main() -> None:
         st.rerun()
 
     st.sidebar.caption("読み取り元: origin-core / policy_violations")
-    st.sidebar.caption(f"取得済 {len(violations)} 件 (server-side period filter)")
+    st.sidebar.caption(
+        f"取得済 {len(violations)} 件 (server-side period filter, max {MAX_ROWS})"
+    )
 
     filtered = apply_filters(violations, tools, rules)
 
