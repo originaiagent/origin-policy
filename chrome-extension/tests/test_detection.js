@@ -248,6 +248,46 @@ function detectExtra(text) {
   );
 }
 
+// 11. R3 returns offsets that point to the body occurrence only (not the
+// 参照 occurrence) — guards highlightFindings against over-marking exempt
+// content.
+{
+  const t = "本文に Phase2a があります。\n\n## 参照\n- Phase2a 詳細\n";
+  // Re-run detection that returns offsets so we can verify them.
+  function detectR3Offsets(text) {
+    const body = splitBody(text);
+    const exc = ranges(body);
+    const found = [];
+    for (const p of D.r3_patterns) {
+      const re = new RegExp(p.pattern, p.flags);
+      let m;
+      while ((m = re.exec(body)) !== null) {
+        if (inExc(m.index, m.index + m[0].length, exc)) {
+          if (re.lastIndex === m.index) re.lastIndex++;
+          continue;
+        }
+        found.push({
+          id: p.id,
+          severity: p.severity,
+          match: m[0],
+          start: m.index,
+          end: m.index + m[0].length,
+        });
+        if (re.lastIndex === m.index) re.lastIndex++;
+      }
+    }
+    return found;
+  }
+  const r3 = detectR3Offsets(t);
+  const phase = r3.filter((f) => f.id === "phase_id");
+  assert(phase.length === 1, "R3 emits exactly one phase_id finding (body only, not 参照)");
+  // The body-relative offset for Phase2a in "本文に Phase2a..." is 4.
+  assert(
+    phase[0].start === 4 && phase[0].end === 4 + "Phase2a".length,
+    `R3 finding offsets are correct (got start=${phase[0]?.start}, end=${phase[0]?.end})`,
+  );
+}
+
 if (process.exitCode === 1) {
   console.error("\n❌ Some tests failed");
   process.exit(1);

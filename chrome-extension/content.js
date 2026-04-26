@@ -283,54 +283,103 @@
     return s.length > n ? s.slice(0, n) + "…" : s;
   }
 
-  // Highlight matches inside text nodes by wrapping them in <mark>.
+  // Highlight matches at exact offsets, computed against the same flat-text
+  // representation that detectAll() saw (textContent of the body portion only).
+  // We use Range.surroundContents — no innerHTML, no string templating, so
+  // assistant content that happens to look like HTML can never escape.
+  // Findings carry start/end in the body text, so exempt occurrences (code
+  // blocks, 参照 section, URLs) are not highlighted.
   function highlightFindings(node, findings) {
     if (!findings.length) return;
-    const matches = [...new Set(findings.map((f) => f.match).filter(Boolean))];
+    // Build a flat-position → text-node map identical to what detection used.
+    // We must match what splitBodyAndReference fed into the detectors:
+    //   text = node.textContent ; body = first part before 「参照」 marker.
+    // The findings' offsets are relative to `body`. Since our highlight target
+    // is the same node tree, walking textContent accumulates the same
+    // characters in the same order. Findings that fall after the 参照 cutoff
+    // are skipped (they would have been excluded by R3 anyway).
+    const ranges = [];
+    for (const f of findings) {
+      if (typeof f.start !== "number" || typeof f.end !== "number") continue;
+      ranges.push({ start: f.start, end: f.end });
+    }
+    if (!ranges.length) return;
+
+    // Sort + merge overlapping ranges so surroundContents won't be called on
+    // nested ranges.
+    ranges.sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && r.start <= last.end) {
+        last.end = Math.max(last.end, r.end);
+      } else {
+        merged.push({ ...r });
+      }
+    }
+
+    // Walk text nodes, mapping flat offsets to DOM positions.
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {
       acceptNode: (n) =>
-        n.parentElement && n.parentElement.closest(".__pgate-banner")
+        n.parentElement && n.parentElement.closest(".__pgate-banner, .__pgate-mark")
           ? NodeFilter.FILTER_REJECT
           : NodeFilter.FILTER_ACCEPT,
     });
-    const textNodes = [];
+    const segments = [];
+    let pos = 0;
     let cur;
-    while ((cur = walker.nextNode())) textNodes.push(cur);
+    while ((cur = walker.nextNode())) {
+      const len = cur.nodeValue.length;
+      segments.push({ node: cur, start: pos, end: pos + len });
+      pos += len;
+    }
 
-    for (const tn of textNodes) {
-      let html = tn.nodeValue;
-      let changed = false;
-      for (const m of matches) {
-        if (!m || m.length < 2) continue;
-        const escaped = m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const re = new RegExp(escaped, "g");
-        if (re.test(html)) {
-          html = html.replace(
-            re,
-            (s) => `<mark class="__pgate-mark">${escapeHtml(s)}</mark>`,
-          );
-          changed = true;
+    function locate(offset) {
+      // Binary search by start; segments are ordered.
+      for (const s of segments) {
+        if (offset >= s.start && offset <= s.end) {
+          return { node: s.node, offsetInNode: offset - s.start };
         }
       }
-      if (changed) {
-        const span = document.createElement("span");
-        span.innerHTML = html;
-        tn.parentNode.replaceChild(span, tn);
+      return null;
+    }
+
+    // Apply highlights in reverse order so earlier indices stay valid as we
+    // mutate the DOM after each surroundContents.
+    for (let i = merged.length - 1; i >= 0; i--) {
+      const r = merged[i];
+      const startLoc = locate(r.start);
+      const endLoc = locate(r.end);
+      if (!startLoc || !endLoc) continue;
+      const range = document.createRange();
+      try {
+        range.setStart(startLoc.node, startLoc.offsetInNode);
+        range.setEnd(endLoc.node, endLoc.offsetInNode);
+        const mark = document.createElement("mark");
+        mark.className = "__pgate-mark";
+        // surroundContents throws if the range partially intersects a non-text
+        // node boundary. In that case, fall back to extractContents+wrap.
+        try {
+          range.surroundContents(mark);
+        } catch (_e) {
+          const frag = range.extractContents();
+          mark.appendChild(frag);
+          range.insertNode(mark);
+        }
+      } catch (_outer) {
+        // Range setup failed (e.g. nodes were removed mid-scan). Skip.
       }
     }
   }
 
   function clearHighlights(node) {
-    node
-      .querySelectorAll(".__pgate-mark")
-      .forEach((el) => el.replaceWith(...el.childNodes));
-  }
-
-  function escapeHtml(s) {
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    node.querySelectorAll(".__pgate-mark").forEach((el) => {
+      const parent = el.parentNode;
+      if (!parent) return;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+      parent.normalize();
+    });
   }
 
   // --- Logging (push to background.js for persistence) ---
@@ -354,10 +403,13 @@
   }
 
   // --- Per-node scan ---
+  // Uses textContent (not innerText) to avoid forcing a layout/reflow on
+  // every streamed character. Detection findings carry exact offsets so
+  // highlightFindings can target them precisely.
   function scanNode(node) {
     if (!STATE.enabled) return;
     if (node.dataset.pgateBypassed === "1") return;
-    const text = node.innerText || node.textContent || "";
+    const text = node.textContent || "";
     if (!text.trim()) return;
     const findings = detectAll(text);
     const prev = STATE.findingsByNode.get(node) || [];
@@ -370,6 +422,8 @@
     }
     STATE.findingsByNode.set(node, findings);
     if (findings.length) {
+      // Clear stale highlights before re-applying so offsets stay correct.
+      clearHighlights(node);
       renderBanner(node, findings);
       highlightFindings(node, findings);
       logFindings(findings);
@@ -395,31 +449,59 @@
   }
 
   // --- MutationObserver ---
+  // Performance: streaming responses fire characterData mutations dozens of
+  // times per second. We coalesce dirty nodes and process them once per
+  // animation frame, with a small additional setTimeout backoff so a busy
+  // streaming token-by-token update doesn't fire detection on every keystroke.
+  const SCAN_DEBOUNCE_MS = 120;
+  const _pendingScans = new Set();
+  let _scanScheduled = null;
+  function scheduleScan(node) {
+    _pendingScans.add(node);
+    if (_scanScheduled) return;
+    _scanScheduled = setTimeout(() => {
+      _scanScheduled = null;
+      const todo = [..._pendingScans];
+      _pendingScans.clear();
+      todo.forEach((n) => {
+        if (n.isConnected) scanNode(n);
+      });
+    }, SCAN_DEBOUNCE_MS);
+  }
+
   const observer = new MutationObserver((mutations) => {
     if (!STATE.enabled) return;
-    const dirty = new Set();
     for (const m of mutations) {
       if (m.type === "childList") {
         for (const n of m.addedNodes) {
           if (!(n instanceof Element)) continue;
-          findCandidates(n).forEach((el) => dirty.add(el));
-          if (isAssistantNode(n)) dirty.add(n);
+          findCandidates(n).forEach(scheduleScan);
+          if (isAssistantNode(n)) scheduleScan(n);
         }
       } else if (m.type === "characterData") {
         const parent = m.target?.parentElement?.closest?.(SELECTORS.join(","));
-        if (parent) dirty.add(parent);
+        if (parent) scheduleScan(parent);
       }
     }
-    dirty.forEach(scanNode);
   });
 
+  function findObserveRoot() {
+    // Prefer a narrower root than document.body to reduce mutation traffic.
+    return (
+      document.querySelector("main") ||
+      document.querySelector('[role="main"]') ||
+      document.body
+    );
+  }
+
   function startObserver() {
-    observer.observe(document.body, {
+    const root = findObserveRoot();
+    observer.observe(root, {
       childList: true,
       subtree: true,
       characterData: true,
     });
-    findCandidates(document.body).forEach(scanNode);
+    findCandidates(root).forEach(scheduleScan);
   }
 
   // --- Clipboard intercept ---

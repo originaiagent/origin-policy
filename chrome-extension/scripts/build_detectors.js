@@ -110,7 +110,8 @@ function main() {
 
   const data = {
     schema_version: "1.0",
-    generated_at: new Date().toISOString(),
+    // Note: generated_at is intentionally omitted to keep the file content
+    // deterministic and avoid spurious diffs / merge conflicts.
     source: {
       tier0: "rules/tier0_detectors.yaml",
       categories: "rules/human_judgment_categories.yaml",

@@ -4,7 +4,6 @@
 
 window.__POLICY_GATE_DETECTORS__ = {
   "schema_version": "1.0",
-  "generated_at": "2026-04-26T11:49:10.733Z",
   "source": {
     "tier0": "rules/tier0_detectors.yaml",
     "categories": "rules/human_judgment_categories.yaml",

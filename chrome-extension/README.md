@@ -97,6 +97,24 @@ node chrome-extension/tests/test_detection.js
 `chrome.storage.local` に `dashboard_url` / `dashboard_api_key` を保存し、
 将来的に Supabase REST API へ流し込む形を想定。Phase 3 v1 は POST 実装なし。
 
+## セキュリティ・パフォーマンス上の設計判断
+
+- **XSS 対策**: ハイライトは `Range.surroundContents` で `<mark>` を挿入する。
+  `innerHTML` は使わない（assistant 出力に HTML 様の文字列が混在しても active
+  HTML としてパースされない）。
+- **Reflow 削減**: 検出は `node.textContent` を使う（`innerText` と異なり
+  layout/reflow をトリガーしない）。
+- **Debounce**: 連続する MutationObserver 発火（streaming token）に対して
+  120ms の coalescing を入れて検出回数を抑える。
+- **Observer scope の絞り込み**: `document.body` ではなく `<main>` /
+  `[role="main"]` を優先して subtree 観察する（claude.ai に該当が無ければ
+  body にフォールバック）。
+- **過剰ハイライトの回避**: ハイライトは finding が持つ exact start/end
+  offset を使い、文字列マッチではなく Range で wrap する。コードブロック /
+  参照欄に同じ文字列が出ても、検出されない occurrence はハイライトされない。
+- **storage 競合の排除**: `background.js` の `appendLog` は Promise chain
+  で直列化（`get → set` 間の race を防ぐ）。
+
 ## 既知の制約
 
 - `claude.ai` の DOM セレクタは将来変更され得る。複数フォールバック

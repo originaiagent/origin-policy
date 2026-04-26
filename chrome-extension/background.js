@@ -49,13 +49,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-async function appendLog(entries) {
-  if (!entries.length) return;
-  const cur = await chrome.storage.local.get({ log: [] });
-  const next = [...entries, ...(cur.log || [])].slice(0, LOG_LIMIT);
-  await chrome.storage.local.set({ log: next });
+// Serialize storage updates so concurrent appendLog calls cannot race
+// (chrome.storage.local.get + set is not atomic).
+let _logChain = Promise.resolve();
+function appendLog(entries) {
+  if (!entries.length) return Promise.resolve();
+  _logChain = _logChain.then(async () => {
+    const cur = await chrome.storage.local.get({ log: [] });
+    const next = [...entries, ...(cur.log || [])].slice(0, LOG_LIMIT);
+    await chrome.storage.local.set({ log: next });
 
-  // Lane 4 hook (settings only — no fetch in Phase 3 v1).
-  // const cfg = await chrome.storage.local.get({ dashboard_url: "", dashboard_api_key: "" });
-  // if (cfg.dashboard_url && cfg.dashboard_api_key) { /* POST to dashboard */ }
+    // Lane 4 hook (settings only — no fetch in Phase 3 v1).
+    // const cfg = await chrome.storage.local.get({ dashboard_url: "", dashboard_api_key: "" });
+    // if (cfg.dashboard_url && cfg.dashboard_api_key) { /* POST to dashboard */ }
+  });
+  return _logChain;
 }
