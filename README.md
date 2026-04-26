@@ -58,6 +58,17 @@ origin-policy/
 │       └── r5_freeform_instruction.yaml
 ├── tests/
 │   └── test_policy_gate.py
+├── chrome-extension/                 # Phase 3: claude.ai Web UI 自動検査
+│   ├── manifest.json                 # Manifest V3
+│   ├── background.js                 # service worker（state / log）
+│   ├── content.js                    # MutationObserver + 検出 + バナー + copy intercept
+│   ├── detectors.generated.js        # rules/ から build script で生成
+│   ├── local_rules.yaml              # 拡張ローカル補完（爆速語追加分）
+│   ├── popup.html / popup.js / popup.css
+│   ├── styles/banner.css
+│   ├── icons/
+│   ├── scripts/build_detectors.js    # yaml → JS 変換
+│   └── tests/test_detection.js       # Node 検出スモークテスト
 └── .github/workflows/test.yml        # CI
 ```
 
@@ -188,6 +199,20 @@ expected:
   status: BLOCK                    # PASS / WARN / BLOCK
   detected_rules: [R3]
   detected_patterns: [phase_id]    # 任意。指定すると検証がより厳密に
+```
+
+## Chrome 拡張（Phase 3）
+
+claude.ai Web UI の管理クロード発言を自動検査する Chrome 拡張。Stop hook では
+届かない Web UI 出力に対する最終防衛線。詳細・読み込み手順は
+[chrome-extension/README.md](./chrome-extension/README.md) 参照。
+
+```bash
+# 検出器の再生成（rules/tier0_detectors.yaml 更新時）
+node chrome-extension/scripts/build_detectors.js
+
+# 検出ロジックのスモークテスト
+node chrome-extension/tests/test_detection.js
 ```
 
 ## 拡張ポイント
